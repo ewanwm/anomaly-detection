@@ -1,0 +1,6 @@
+numpy
+uproot
+torch
+normflows
+matplotlib
+corner
