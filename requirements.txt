@@ -4,3 +4,6 @@ torch
 normflows
 matplotlib
 corner
+tqdm
+pandas
+awkward-pandas
