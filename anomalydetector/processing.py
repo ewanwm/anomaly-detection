@@ -1,40 +1,83 @@
 
 import os
 import abc
+import typing
 
 import uproot
 import numpy as np
 import torch
 from torch import masked 
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset as TorchDataset
+
+class Dataset(TorchDataset, abc.ABC):
+
+    def __init__(self, label:typing.Optional[int] = None):
+
+        self._label: int | None = label
+
+    @classmethod
+    @abc.abstractmethod
+    def _get_item(index:int): 
+        raise NotImplementedError()
+    
+    @classmethod
+    @abc.abstractmethod
+    def get_n_features(self):
+        raise NotImplementedError()
+    
+    def __getitem__(self, index:int):
+        
+        event = self._get_item(index)
+
+        if self._label is None:
+            return event, event
+        
+        else:
+            return event, self._label
+    
+    
 
 class InMemoryDataset(Dataset, abc.ABC):
-    def __init__(self, filenames:list[str]):
-        super().__init__()
+
+    def __init__(self, filenames:list[str], label:typing.Optional[int] = None):
+        
+        super().__init__(label)
 
         self._raw_filenames = filenames
         self._data: torch.Tensor | None = None
 
 
     def __len__(self):
+
         return self._data.shape[0]
 
 
-    def __getitem__(self, index):
+    def _get_item(self, index):
         
-        event = self._data[index]
-        return event, event
-    
+        return self._data[index]
+
+
     @classmethod
     @abc.abstractmethod
     def process(self):
+
         raise NotImplementedError()
     
 
 
 class InMemoryND280EventDataset(InMemoryDataset):
 
-    def __init__(self, filenames:list[str], branches:list[str], branch_scaling, branch_mask_vals, branch_mask_replace_vals, use_masked_tensor:bool=False, filter:str=None):
+    def __init__(
+            self, 
+            filenames:list[str], 
+            branches:list[str], 
+            branch_scaling, 
+            branch_mask_vals, 
+            branch_mask_replace_vals, 
+            use_masked_tensor:bool=False, 
+            filter:str=None
+        ):
+
         super().__init__(filenames)
 
         self._branches = branches
@@ -85,7 +128,18 @@ class InMemoryND280EventDataset(InMemoryDataset):
 
 
 class nd280EventDataset(Dataset):
-    def __init__(self, root, filenames:list[str], branches:list[str], branch_scaling, branch_mask_vals, branch_mask_replace_vals, use_masked_tensor:bool=False, filter:str=None):
+    def __init__(
+            self, 
+            root, 
+            filenames:list[str], 
+            branches:list[str], 
+            branch_scaling, 
+            branch_mask_vals, 
+            branch_mask_replace_vals, 
+            use_masked_tensor:bool=False, 
+            filter:str=None
+        ):
+
         super().__init__()
 
         self.root = root
@@ -142,10 +196,14 @@ class nd280EventDataset(Dataset):
                     event_idx += 1
 
     def __len__(self):
+        
         return len(self._processed_filenames)
 
 
-    def __getitem__(self, index):
+    def _get_item(self, index):
+
         with torch.serialization.safe_globals([masked.MaskedTensor]):
+
             event = torch.load(os.path.join(self.root, f'event_{index}_proc.pt'))
-        return event, event
+
+        return event
