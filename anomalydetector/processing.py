@@ -57,6 +57,11 @@ class InMemoryDataset(Dataset, abc.ABC):
         return self._data[index]
 
 
+    def get_data(self):
+
+        return self._data
+
+    
     @classmethod
     @abc.abstractmethod
     def process(self):
@@ -125,6 +130,20 @@ class InMemoryND280EventDataset(InMemoryDataset):
                 file_data_list.append(file_data)
 
         self._data = torch.cat(file_data_list)
+
+    def dump_branches(self):
+
+        ## open up the first file in the file list and print it's available branches
+        with uproot.open(self._raw_filenames[0]) as file:
+            sample_sum = file['sample_sum'].arrays(
+                filter_branch=lambda b: b.name.find("Graph") == -1 and b.typename.find("std::vector") == -1,
+                library='pd'
+            )
+
+            print (":::::: Available branches ::::::::")
+
+            for branch in file['sample_sum'].branches:
+                print(f'  - {branch.name}: {branch.typename}')
 
 
 class nd280EventDataset(Dataset):
@@ -207,3 +226,18 @@ class nd280EventDataset(Dataset):
             event = torch.load(os.path.join(self.root, f'event_{index}_proc.pt'))
 
         return event
+    
+
+    def dump_branches(self):
+
+        ## open up the first file in the file list and print it's available branches
+        with uproot.open(self._raw_filenames[0]) as file:
+            sample_sum = file['sample_sum'].arrays(
+                filter_branch=lambda b: b.name.find("Graph") == -1 and b.typename.find("std::vector") == -1,
+                library='pd'
+            )
+
+            print (":::::: Available branches ::::::::")
+
+            for branch in file['sample_sum'].branches:
+                print(f'  - {branch.name}: {branch.typename}')
