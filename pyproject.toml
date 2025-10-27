@@ -1,0 +1,28 @@
+[project]
+    name = "anomalydetector"
+
+    dynamic = ["version", "dependencies"]
+
+    description = "Anomaly detector for neutrino interactions"
+
+    readme = "README.md"
+
+    maintainers = [
+        {name = "Ewan Miller", email="e.w.miller@imperial.ac.uk"},
+    ]
+
+    authors = [
+        {name = "Ewan Miller", email="e.w.miller@imperial.ac.uk"},
+    ]
+
+    license = "GPL-3.0-or-later"
+
+[build-system]
+    requires = ["setuptools"]
+    build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+    dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools]
+    py-modules = ["anomalydetector"]
