@@ -1,3 +1,5 @@
+import typing
+
 import normflows as nf
 
 import torch
@@ -6,7 +8,9 @@ from torch.distributions.normal import Normal
 from torch.nn import MSELoss
 
 class VAE(nn.Module):
+
     def __init__(self, n_features, latent_size):
+    
         super().__init__()
 
         self._n_features = n_features
@@ -29,6 +33,8 @@ class VAE(nn.Module):
             nn.ReLU(True),
             nn.Linear(512, self._n_features),
         )
+
+        self.loss_fn = MSELoss()
 
     def forward(self, x):
         # Encode
@@ -55,19 +61,77 @@ class VAE(nn.Module):
     def train_batch(self, data):
 
         rc_batch, mu, log_var = self.forward(data)
-        loss = MSELoss()(data, rc_batch)
+        loss = self.loss_fn(data, rc_batch)
         loss.backward()
 
         return loss
     
-class NFVae(nf.NormalizingFlowVAE):
+class NFVAE(nf.NormalizingFlowVAE):
     
+    def __init__(
+            self, 
+            n_bottleneck:int, 
+            hidden_units_encoder:typing.List[int], 
+            hidden_units_decoder:typing.List[int], 
+            n_flows:int, 
+            flow_type:str, 
+            device
+        ):
+
+        super().__init__()
+        
+        ## create normal distribution to use as prior
+        self.prior = torch.distributions.MultivariateNormal(
+            torch.zeros(n_bottleneck, device=device),
+            torch.eye(n_bottleneck, device=device)
+        )
+        
+        ## set up encoder and decoder networks
+        encoder_nn = nf.nets.MLP(hidden_units_encoder)
+        decoder_nn = nf.nets.MLP(hidden_units_decoder)
+        
+        self.encoder = nf.distributions.NNDiagGaussian(encoder_nn)
+        self.decoder = nf.distributions.NNBernoulliDecoder(decoder_nn)
+
+        ## set up the flows
+        self.flows = None
+
+        if flow_type == 'Planar':
+            
+            self.flows = [nf.flows.Planar((n_bottleneck,)) for k in range(n_flows)]
+        
+        elif flow_type == 'Radial':
+            
+            self.flows = [nf.flows.Radial((n_bottleneck,)) for k in range(n_flows)]
+        
+        elif flow_type == 'RealNVP':
+        
+            b = torch.tensor(n_bottleneck // 2 * [0, 1] + n_bottleneck % 2 * [0])
+            
+            self.flows = []
+            
+            for i in range(n_flows):
+                s = nf.nets.MLP([n_bottleneck, n_bottleneck])
+                t = nf.nets.MLP([n_bottleneck, n_bottleneck])
+                if i % 2 == 0:
+                    self.flows += [nf.flows.MaskedAffineFlow(b, t, s)]
+                else:
+                    self.flows += [nf.flows.MaskedAffineFlow(1 - b, t, s)]
+        else:
+            raise NotImplementedError
+
+        ## instantiate the nf.NormalizingFlowVAE
+        super().__init__(self.prior, self.encoder, self.flows, self.decoder)
+
     def fit_batch(self, data):
 
         z, log_q, log_p = self(data, self.num_samples)
+
         mean_log_q = torch.mean(log_q)
         mean_log_p = torch.mean(log_p)
+        
         loss = mean_log_q - mean_log_p
+        
         loss.backward()
 
         return loss
