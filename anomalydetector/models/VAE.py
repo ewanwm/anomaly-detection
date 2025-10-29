@@ -75,11 +75,10 @@ class NFVAE(nf.NormalizingFlowVAE):
             hidden_units_decoder:typing.List[int], 
             n_flows:int, 
             flow_type:str, 
+            num_samples:int,
             device
         ):
 
-        super().__init__()
-        
         ## create normal distribution to use as prior
         self.prior = torch.distributions.MultivariateNormal(
             torch.zeros(n_bottleneck, device=device),
@@ -90,40 +89,46 @@ class NFVAE(nf.NormalizingFlowVAE):
         encoder_nn = nf.nets.MLP(hidden_units_encoder)
         decoder_nn = nf.nets.MLP(hidden_units_decoder)
         
-        self.encoder = nf.distributions.NNDiagGaussian(encoder_nn)
-        self.decoder = nf.distributions.NNBernoulliDecoder(decoder_nn)
+        encoder = nf.distributions.NNDiagGaussian(encoder_nn)
+        decoder = nf.distributions.NNBernoulliDecoder(decoder_nn)
 
         ## set up the flows
-        self.flows = None
+        flows = None
 
         if flow_type == 'Planar':
             
-            self.flows = [nf.flows.Planar((n_bottleneck,)) for k in range(n_flows)]
+            flows = [nf.flows.Planar((n_bottleneck,)) for k in range(n_flows)]
         
         elif flow_type == 'Radial':
             
-            self.flows = [nf.flows.Radial((n_bottleneck,)) for k in range(n_flows)]
+            flows = [nf.flows.Radial((n_bottleneck,)) for k in range(n_flows)]
         
         elif flow_type == 'RealNVP':
         
             b = torch.tensor(n_bottleneck // 2 * [0, 1] + n_bottleneck % 2 * [0])
             
-            self.flows = []
+            flows = []
             
             for i in range(n_flows):
                 s = nf.nets.MLP([n_bottleneck, n_bottleneck])
                 t = nf.nets.MLP([n_bottleneck, n_bottleneck])
                 if i % 2 == 0:
-                    self.flows += [nf.flows.MaskedAffineFlow(b, t, s)]
+                    flows += [nf.flows.MaskedAffineFlow(b, t, s)]
                 else:
-                    self.flows += [nf.flows.MaskedAffineFlow(1 - b, t, s)]
+                    flows += [nf.flows.MaskedAffineFlow(1 - b, t, s)]
         else:
             raise NotImplementedError
 
         ## instantiate the nf.NormalizingFlowVAE
-        super().__init__(self.prior, self.encoder, self.flows, self.decoder)
+        super().__init__(self.prior, encoder, flows, decoder)
 
-    def fit_batch(self, data):
+        self.num_samples = num_samples
+
+    def set_num_samples(self, num_samples):
+        
+        self.num_samples = num_samples
+
+    def train_batch(self, data):
 
         z, log_q, log_p = self(data, self.num_samples)
 
