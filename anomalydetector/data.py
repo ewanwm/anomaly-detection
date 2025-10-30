@@ -39,13 +39,18 @@ class Dataset(TorchDataset, abc.ABC):
 
 class InMemoryDataset(Dataset, abc.ABC):
 
-    def __init__(self, filenames:list[str], label:typing.Optional[int] = None):
+    def __init__(
+            self, 
+            label:typing.Optional[int] = None,
+            plot_ranges:typing.List[typing.Tuple[float]] = None,
+            plot_titles:typing.List[str] = None,
+        ):
         
         super().__init__(label)
 
-        self._raw_filenames = filenames
+        self.plot_ranges = plot_ranges
+        self.plot_titles = plot_titles
         self._data: torch.Tensor | None = None
-
 
     def __len__(self):
 
@@ -80,10 +85,17 @@ class InMemoryND280EventDataset(InMemoryDataset):
             branch_mask_vals, 
             branch_mask_replace_vals, 
             use_masked_tensor:bool=False, 
-            filter:str=None
+            filter:str=None,
+            plot_ranges:typing.List[typing.Tuple[float]]=None,
+            plot_titles:typing.List[str]=None,
+            label: int = None,
         ):
 
-        super().__init__(filenames)
+        super().__init__(
+            label = label,
+            plot_ranges = plot_ranges,
+            plot_titles = plot_titles,
+        )
 
         self._branches = branches
         self._branch_mask_vals = branch_mask_vals
@@ -91,11 +103,13 @@ class InMemoryND280EventDataset(InMemoryDataset):
         self._branch_mask_replace_vals = torch.tensor(branch_mask_replace_vals)
         self._processed_filenames = []
         self._filter = filter
+        self._raw_filenames = filenames
 
         self.use_masked_tensor = use_masked_tensor
 
     
     def get_n_features(self):
+
         return len(self._branches)
 
 
@@ -145,6 +159,31 @@ class InMemoryND280EventDataset(InMemoryDataset):
             for branch in file['sample_sum'].branches:
                 print(f'  - {branch.name}: {branch.typename}')
 
+
+class GaussuanDataset(InMemoryDataset):
+
+    def __init__(
+        self,
+        mean,
+        cov,
+        n_samples:int,
+        label: int = None
+    ):
+
+        self._mean = mean
+        self._cov = cov
+        self._n_samples = n_samples
+        
+        super().__init__(label = label)
+
+    def process(self):
+
+        self._data = torch.tensor(np.random.multivariate_normal(self._mean, self._cov, size=(self._n_samples)).astype(np.float32))
+
+    def get_n_features(self):
+
+        return len(self._mean)
+        
 
 class nd280EventDataset(Dataset):
     def __init__(
@@ -232,10 +271,6 @@ class nd280EventDataset(Dataset):
 
         ## open up the first file in the file list and print it's available branches
         with uproot.open(self._raw_filenames[0]) as file:
-            sample_sum = file['sample_sum'].arrays(
-                filter_branch=lambda b: b.name.find("Graph") == -1 and b.typename.find("std::vector") == -1,
-                library='pd'
-            )
 
             print (":::::: Available branches ::::::::")
 
