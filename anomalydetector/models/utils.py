@@ -7,8 +7,6 @@ from anomalydetector.models.VAE import NFVAE, VAE
 from anomalydetector.models.NICE import NICEModel, NICE_gaussian_loss
 
 def get_latent_dists(model, data_loader, device, quiet=False):
-    
-    n_features = data_loader.dataset.get_n_features()
 
     enc_dist_list     = []
     llh_dist_list     = []
@@ -17,10 +15,15 @@ def get_latent_dists(model, data_loader, device, quiet=False):
     if isinstance(model, NFVAE):
         for x, n in data_loader:
             x = x.to(device)
-            encoded, log_q, log_p = model(x)
-            decoded = model.decoder(encoded)
-            decoded_dist_list.append(decoded.detach().to(torch.device("cpu"))[:,0,:])
-            enc_dist_list.append(encoded.detach().to(torch.device("cpu"))[:,0,:])
+            encoded, log_q, log_p = model(x, num_samples=1)
+            
+            # average over sample axis
+            encoded = torch.mean(encoded, axis = 1)
+            
+            decoded_mean, decoded_std = model.decoder(encoded)
+
+            decoded_dist_list.append(decoded_mean.detach().to(torch.device("cpu")))
+            enc_dist_list.append(encoded.detach().to(torch.device("cpu")))
 
     if isinstance(model, VAE):
         for x, n in data_loader:
