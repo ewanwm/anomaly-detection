@@ -90,7 +90,7 @@ class NFVAE(nf.NormalizingFlowVAE):
         decoder_nn = nf.nets.MLP(hidden_units_decoder)
         
         encoder = nf.distributions.NNDiagGaussian(encoder_nn)
-        decoder = nf.distributions.NNBernoulliDecoder(decoder_nn)
+        decoder = nf.distributions.NNDiagGaussianDecoder(decoder_nn)
 
         ## set up the flows
         flows = None
@@ -132,10 +132,7 @@ class NFVAE(nf.NormalizingFlowVAE):
 
         z, log_q, log_p = self(data, self.num_samples)
 
-        mean_log_q = torch.mean(log_q)
-        mean_log_p = torch.mean(log_p)
-        
-        loss = mean_log_q - mean_log_p
+        loss = torch.mean(log_q) - torch.mean(log_p)
         
         loss.backward()
 
